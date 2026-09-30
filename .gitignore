@@ -1,0 +1,9 @@
+.env
+.env.example
+/node_modules
+.exe
+.pytest_cache
+.vscode
+.idea
+pycache
+
