@@ -54,8 +54,10 @@ messages =[
     
 ]
 
+max_iterations = 5
+iter = 0
 while iter < max_iterations:
-   
+    iter += 1
     user_input = input("You:")
     if user_input == 'x':
         print("existing the agent")
