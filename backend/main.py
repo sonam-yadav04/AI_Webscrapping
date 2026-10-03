@@ -98,6 +98,8 @@ while iter < max_iterations:
     else:    
         print("Assistance:", msg.content)
         messages.append({"role":"assistant", "content": msg.content})
+else:
+    print("closing the application safely!!!!!!!!!!!!!")        
 
 if __name__ == "__main__":
     import uvicorn
