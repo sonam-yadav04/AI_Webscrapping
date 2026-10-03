@@ -58,46 +58,42 @@ max_iterations = 5
 iter = 0
 while iter < max_iterations:
     iter += 1
-    user_input = input("You:")
+    user_input = input("You: ")
     if user_input == 'x':
-        print("existing the agent")
         break
-    messages.append({"role":"user","content":user_input})
-    resp = client.chat.completions.create(
-        model="qwen/qwen3.8-27b",
-        messages=messages,
-        tools=tools,
-        tool_choice="auto",
-    )
-    
-    msg = resp.choices[0].message
-    print("DEBUG tool_calls:", msg.tool_calls) 
-    if msg.tool_calls:
-        call = msg.tool_calls[0]
-        args= json.loads(call.function.arguments)
-        result = get_application_count(**args)
+    messages.append({"role": "user", "content": user_input})
+
+    while True:   # ← inner loop: keeps going until model is done with tools
+        resp = client.chat.completions.create(
+            model="qwen/qwen3.8-27b",
+            messages=messages,
+            tools=tools,
+            tool_choice="auto",
+            max_tokens=500
+        )
+        msg = resp.choices[0].message
+
+        if not msg.tool_calls:
+            print("Assistant:", msg.content)
+            messages.append({"role": "assistant", "content": msg.content})
+            break   # ← breaks the INNER loop only, back to outer loop for next user input
 
         messages.append({
-            "role":"assistant",
-            "content":msg.content,
-            "tool_calls":[tc.model_dump() for tc in msg.tool_calls]
+            "role": "assistant",
+            "content": msg.content,
+            "tool_calls": [tc.model_dump() for tc in msg.tool_calls]
         })
-        messages.append({
-            "role":"tool",
-            "tool_call_id":call.id,
-            "content":str(result)
-        })
-        
-        final_res = client.chat.completions.create(
-            model="qwen/qwen3.8-27b",
-            messages=messages
-            
-        )
-        print("Assistance:",final_res.choices[0].message.content)
-        
-    else:    
-        print("Assistance:", msg.content)
-        messages.append({"role":"assistant", "content": msg.content})
+
+        for call in msg.tool_calls:
+            func = available_func[call.function.name]
+            args = json.loads(call.function.arguments)
+            result = func(**args)
+            messages.append({
+                "role": "tool",
+                "tool_call_id": call.id,
+                "content": str(result)
+            })
+        # inner loop continues automatically — sends tool results back without asking for input
 else:
     print("closing the application safely!!!!!!!!!!!!!")        
 
