@@ -20,26 +20,50 @@ client = Groq(api_key=api_key)
 def get_application_count(status):
      fake_db = {"applied": 12, "interviewing": 3, "rejected": 5}
      return fake_db.get(status, 0)
+ 
+def add_application(company, role, status="applied"):
+    # pretend this writes to your DB
+    return f"Added {role} at {company} with status '{status}'" 
+
+available_funcs = {
+     "get_app_count" : get_application_count,
+      "add_app"  : add_application
+     
+}
+ 
 
 tools = [
     {
-        "type":"function",
+      "type":"function",
         "function":{
-                      "name":"get_application_count",
-                      "description":"Get number of job applications with a given status",   
-                       "parameters":{
-                                "type":"object",
-                                 "properties":{
-                                 "status":{
-                                    "type":"string",
-                                    "enum":["applied","interviewing","rejected"]
-                                    }  
-                                    },
-                                "required":["status"]
-                                  },
-                    }     
-         }    
-       ] 
+        "name":"get_app_count",
+        "description":"Get number of job applications with a given status",   
+        "parameters":{
+                "type":"object",
+                    "properties":{
+                    "status":{"type":"string","enum":["applied","interviewing","rejected"]}  
+                    },
+                "required":["status"]
+            }
+        }
+    } ,
+    {   
+     "type" :"function",
+        "function":{
+            "name":"add_app",
+            "description":"Add a new job application record with a company, role, and optional status",   
+            "parameters":{
+                "type":"object",
+                    "properties":{
+                    "company":{"type":"string"},
+                    "role":{ "type":"string" },
+                    "status":{ "type":"string","enum":["applied","interviewing","rejected"]}
+                    },         
+                "required":["company","role"]
+            }
+        }     
+     }
+    ] 
  
 
 #system prompt
@@ -50,58 +74,63 @@ Reply normally for general questions, but if the user asks about application sta
 
 #message array
 messages =[
-    {"role":"assistant", "content":system_prompt},
+    {"role":"system", "content":system_prompt},
     
 ]
-
-max_iterations = 5
-iter = 0
-while iter < max_iterations:
-    iter += 1
-    user_input = input("You: ")
-    if user_input == 'x':
-        break
-    messages.append({"role": "user", "content": user_input})
-
-    while True:   # ← inner loop: keeps going until model is done with tools
-        resp = client.chat.completions.create(
-            model="qwen/qwen3.8-27b",
-            messages=messages,
-            tools=tools,
-            tool_choice="auto",
-            max_tokens=500
-        )
-        msg = resp.choices[0].message
-
-        if not msg.tool_calls:
-            print("Assistant:", msg.content)
-            messages.append({"role": "assistant", "content": msg.content})
-            break   # ← breaks the INNER loop only, back to outer loop for next user input
-
-        messages.append({
-            "role": "assistant",
-            "content": msg.content,
-            "tool_calls": [tc.model_dump() for tc in msg.tool_calls]
-        })
-
-        for call in msg.tool_calls:
-            func = available_func[call.function.name]
-            args = json.loads(call.function.arguments)
-            result = func(**args)
+def cli():
+    MAX_TOOL_ROUNDS = 5
+    
+    while True:
+ 
+        user_input = input("You:")
+        if user_input == 'x':
+            print("existing the agent")
+            break
+        messages.append({"role":"user","content":user_input})
+        for _ in range(MAX_TOOL_ROUNDS):
+            resp = client.chat.completions.create(
+                model="qwen/qwen3.8-27b",
+                messages=messages,
+                tools=tools,
+                tool_choice="auto",
+                max_tokens=500,
+            )
+            
+            msg = resp.choices[0].message
+            print("DEBUG tool_calls:", msg.tool_calls) 
+            if not msg.tool_calls:
+                print("Assistant:", msg.content) 
+                messages.append({"role":"assistant","content":msg.content,})
+                break
+                
             messages.append({
-                "role": "tool",
-                "tool_call_id": call.id,
-                "content": str(result)
+                "role":"assistant",
+                "content":msg.content,
+                "tool_calls":[tc.model_dump() for tc in msg.tool_calls]
             })
-        # inner loop continues automatically — sends tool results back without asking for input
-else:
-    print("closing the application safely!!!!!!!!!!!!!")        
+            for call in msg.tool_calls:
+                func = available_funcs[call.function.name]
+                args = json.loads(call.function.arguments)
+                result = func(**args)
+                
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": call.id,
+                    "content": str(result)
+                })
+            
+        else:
+          print("closing the application safely!!!!!!!!!!!!!")        
 
 if __name__ == "__main__":
-    import uvicorn
-    try:
-        uvicorn.run("main:app", host="0.0.0.0",port=8000,reload=True)   
-    except KeyboardInterrupt:
-        print("Server Stoped cleanly")    
-    
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "server":
+        import uvicorn
+        uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    else:
+        try:
+          cli()
+        except:
+            print("\nclosing the application safely!!!!!!!!!!!!!") 
+   
 
