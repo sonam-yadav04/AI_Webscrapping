@@ -69,7 +69,9 @@ tools = [
 #system prompt
 system_prompt = """
 You are a helpful IT support chatbot for 'Tech Solutions'.
-Reply normally for general questions, but if the user asks about application status or count, make a tool call instead of answering directly.
+rules:
+ retrun json format wgen user asked to summarize  something
+ Reply normally for general questions, but if the user asks about application status or count, make a tool call instead of answering directly.
 """
 
 #message array
@@ -81,7 +83,6 @@ def cli():
     MAX_TOOL_ROUNDS = 5
     
     while True:
- 
         user_input = input("You:")
         if user_input == 'x':
             print("existing the agent")
@@ -94,6 +95,7 @@ def cli():
                 tools=tools,
                 tool_choice="auto",
                 max_tokens=500,
+                # response_format={"type": "json_object"}
             )
             
             msg = resp.choices[0].message
@@ -109,18 +111,26 @@ def cli():
                 "tool_calls":[tc.model_dump() for tc in msg.tool_calls]
             })
             for call in msg.tool_calls:
-                func = available_funcs[call.function.name]
-                args = json.loads(call.function.arguments)
-                result = func(**args)
+                func = available_funcs.get(call.function.name)
+                if func is None:
+                    result = f"Error:no such tool exist '{call.function.name}'"
+                try:    
+                   args = json.loads(call.function.arguments)
+                except:
+                    result = "Error: could not parse tool arguments"
+                try:       
+                    result = func(**args)
+                except Exception as e:
+                    result = f"Error: tool failed — {e}"
+                       
                 
                 messages.append({
                     "role": "tool",
                     "tool_call_id": call.id,
                     "content": str(result)
                 })
-            
-        else:
-          print("closing the application safely!!!!!!!!!!!!!")        
+            else:
+               print("closing the application safely!!!!!!!!!!!!!")        
 
 if __name__ == "__main__":
     import sys
@@ -130,7 +140,7 @@ if __name__ == "__main__":
     else:
         try:
           cli()
-        except:
-            print("\nclosing the application safely!!!!!!!!!!!!!") 
+        except Exception as e:
+            print("\nclosing the application safely!!!!",e) 
    
 
